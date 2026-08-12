@@ -1,0 +1,74 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: none
+  enable:
+    - asciicheck
+    - bidichk
+    - durationcheck
+    - errcheck
+    - errchkjson
+    - errname
+    - errorlint
+    - exhaustive
+    - fatcontext
+    - gocheckcompilerdirectives
+    - gochecknoinits
+    - gochecksumtype
+    - gocritic
+    - godoclint
+    - gosec
+    - govet
+    - ineffassign
+    - loggercheck
+    - makezero
+    - mirror
+    - misspell
+    - modernize
+    - musttag
+    - nilerr
+    - nilnesserr
+    - nolintlint
+    - perfsprint
+    - predeclared
+    - reassign
+    - recvcheck
+    - revive
+    - sloglint
+    - staticcheck
+    - tagalign
+    - unconvert
+    - unused
+    - usestdlibvars
+    - usetesting
+    - wastedassign
+    - whitespace
+  settings:
+    errcheck:
+      check-type-assertions: true
+    govet:
+      enable:
+        - shadow
+    misspell:
+      locale: US
+      ignore-rules:
+        - cancelled
+        - cancelling
+  exclusions:
+    rules:
+      - path: ^types_gen\.go$
+        linters:
+          - revive
+        text: "^(exported|var-naming):"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
