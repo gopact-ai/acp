@@ -95,10 +95,10 @@ required fields, default-on-error semantics, idiomatic Go names, and concrete
 union decoding. Schema consistency and union behavior are covered by tests; do
 not replace the file with unmodified upstream output.
 
-The schema's Apache-2.0 license is preserved in
-`third_party/agent-client-protocol.LICENSE`. Required upstream Apache-2.0, MIT,
-and CC-BY-4.0 notices are preserved in `third_party/acp-sdk.LICENSE`; those
-notices do not change this project's Apache-2.0 license.
+The official schema and the generator used to produce `types_gen.go` are
+identified in [`NOTICE`](NOTICE). The generated file contains upstream
+MIT-licensed material as well as Apache-2.0-licensed work; its SPDX header and
+[`LICENSES/MIT.txt`](LICENSES/MIT.txt) define that file-specific exception.
 
 ## Contributing and security
 
@@ -107,4 +107,6 @@ vulnerabilities according to [`SECURITY.md`](SECURITY.md).
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE).
+The project is licensed under the [Apache License 2.0](LICENSE), except for the
+upstream portions of `types_gen.go` identified in [`NOTICE`](NOTICE) and
+licensed under the [MIT License](LICENSES/MIT.txt).

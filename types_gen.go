@@ -1,6 +1,6 @@
-// Copyright 2025 The Go MCP SDK Authors. All rights reserved.
-// Use of this source code is governed by an MIT-style
-// license that can be found in third_party/acp-sdk.LICENSE.
+// SPDX-FileCopyrightText: 2025 The Go MCP SDK Authors
+// SPDX-FileCopyrightText: 2026 gopact-ai contributors
+// SPDX-License-Identifier: Apache-2.0 AND MIT
 
 // Generated with github.com/spachava753/acp-sdk/internal/schemagen at
 // ea76600dde1bd490a2fc6c0c4a44f05383a8abc9 from stable ACP v1 at protocol

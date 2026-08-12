@@ -1,0 +1,16 @@
+gopact-ai/acp
+Copyright 2026 gopact-ai contributors
+
+This product includes the stable Agent Client Protocol v1 schema from
+agentclientprotocol/agent-client-protocol, licensed under the Apache License 2.0.
+
+    Copyright 2025 Zed Industries, Inc. and contributors
+
+types_gen.go was initially generated using spachava753/acp-sdk. The upstream
+generated work is licensed under the MIT License and retains:
+
+    Copyright 2025 The Go MCP SDK Authors. All rights reserved.
+
+Modifications to types_gen.go by gopact-ai contributors are licensed under the
+Apache License 2.0. The MIT License text is available in LICENSES/MIT.txt. The
+Apache License 2.0 text is available in LICENSE.
