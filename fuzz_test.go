@@ -48,6 +48,26 @@ func FuzzDecodeMessage(f *testing.F) {
 	})
 }
 
+func FuzzPromptResponse(f *testing.F) {
+	for _, seed := range []string{
+		`{}`,
+		`null`,
+		`{"stopReason":null}`,
+		`{"stopReason":"end_turn"}`,
+		`{"stopReason":"cancelled","usage":null}`,
+		`{"stopReason":"end_turn","usage":{"totalTokens":300,"inputTokens":100,"outputTokens":110,"thoughtTokens":30,"cachedReadTokens":40,"cachedWriteTokens":50,"_meta":{"provider":"test"}}}`,
+		`{"stopReason":"end_turn","usage":{"totalTokens":0,"inputTokens":0,"outputTokens":0,"thoughtTokens":0,"cachedReadTokens":null}}`,
+	} {
+		f.Add([]byte(seed))
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 1<<20 {
+			t.Skip()
+		}
+		assertStableJSONRoundTrip[PromptResponse](t, data)
+	})
+}
+
 func FuzzIDKey(f *testing.F) {
 	for _, seed := range [][]byte{
 		[]byte(`1`),

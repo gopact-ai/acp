@@ -7,6 +7,9 @@
 // commit af41b25f57a79c5629b3164e23fb4e8650badeeb.
 // Modified by gopact-ai to enforce required union fields and preserve concrete
 // Go types when decoding stable-v1 union variants.
+// PromptResponse.Usage and Usage are maintained by hand from
+// @agentclientprotocol/sdk v1.4.0 schema/schema.json because this repository
+// has no generation script and regenerating would lose the corrections above.
 
 package acp
 
@@ -3095,6 +3098,33 @@ func (r PromptRequest) MarshalJSON() ([]byte, error) {
 type PromptResponse struct {
 	Meta       Meta       `json:"_meta,omitzero"`
 	StopReason StopReason `json:"stopReason"`
+	// Usage is unstable but already emitted by agents; retaining it prevents
+	// clients from silently losing per-turn token accounting.
+	Usage *Usage `json:"usage,omitempty"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (r *PromptResponse) UnmarshalJSON(data []byte) error {
+	type alias PromptResponse
+	decoded := alias{}
+	raw := struct {
+		Usage json.RawMessage `json:"usage"`
+		*alias
+	}{alias: &decoded}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if len(raw.Usage) > 0 {
+		// The SDK schema defaults malformed optional usage so an unstable
+		// accounting extension cannot invalidate an otherwise completed turn.
+		unmarshalDefault(raw.Usage, &decoded.Usage)
+	}
+	// Direct decoders bypass the RPC envelope's required-field validation.
+	if err := requireJSONFieldsOnly(data, "stopReason"); err != nil {
+		return err
+	}
+	*r = PromptResponse(decoded)
+	return nil
 }
 
 // ProtocolVersion: Protocol version identifier.
@@ -5242,6 +5272,48 @@ const (
 type UnstructuredCommandInput struct {
 	Meta Meta   `json:"_meta,omitzero"`
 	Hint string `json:"hint"`
+}
+
+// Usage is token usage for a prompt turn, from @agentclientprotocol/sdk v1.4.0
+// schema/schema.json. This extension is unstable and may change or be removed.
+// Optional counters use pointers to distinguish unreported usage from zero.
+type Usage struct {
+	Meta              Meta    `json:"_meta,omitzero"`
+	TotalTokens       uint64  `json:"totalTokens"`
+	InputTokens       uint64  `json:"inputTokens"`
+	OutputTokens      uint64  `json:"outputTokens"`
+	ThoughtTokens     *uint64 `json:"thoughtTokens,omitempty"`
+	CachedReadTokens  *uint64 `json:"cachedReadTokens,omitempty"`
+	CachedWriteTokens *uint64 `json:"cachedWriteTokens,omitempty"`
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+func (u *Usage) UnmarshalJSON(data []byte) error {
+	type alias Usage
+	decoded := alias{}
+	raw := struct {
+		ThoughtTokens     json.RawMessage `json:"thoughtTokens"`
+		CachedReadTokens  json.RawMessage `json:"cachedReadTokens"`
+		CachedWriteTokens json.RawMessage `json:"cachedWriteTokens"`
+		*alias
+	}{alias: &decoded}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	if len(raw.ThoughtTokens) > 0 {
+		unmarshalDefault(raw.ThoughtTokens, &decoded.ThoughtTokens)
+	}
+	if len(raw.CachedReadTokens) > 0 {
+		unmarshalDefault(raw.CachedReadTokens, &decoded.CachedReadTokens)
+	}
+	if len(raw.CachedWriteTokens) > 0 {
+		unmarshalDefault(raw.CachedWriteTokens, &decoded.CachedWriteTokens)
+	}
+	if err := requireJSONFieldsOnly(data, "totalTokens", "inputTokens", "outputTokens"); err != nil {
+		return err
+	}
+	*u = Usage(decoded)
+	return nil
 }
 
 // UsageUpdate: Context window and cost update for a session.
