@@ -11,23 +11,26 @@ import (
 )
 
 type notification struct {
-	method string
-	params json.RawMessage
-	done   chan struct{}
-	bytes  int
+	sequence uint64
+	method   string
+	params   json.RawMessage
+	done     chan struct{}
+	bytes    int
 }
 
 type notificationContextKey struct{}
 
 type notificationCallScope struct {
-	conn   *Conn
-	active atomic.Bool
+	sequence uint64
+	conn     *Conn
+	active   atomic.Bool
 }
 
 type response struct {
-	result  json.RawMessage
-	err     *Error
-	barrier <-chan struct{}
+	sequence uint64
+	result   json.RawMessage
+	err      *Error
+	barrier  <-chan struct{}
 }
 
 func dispatchExtension(ctx context.Context, method string, params json.RawMessage, handler any) (any, error) {
@@ -53,6 +56,7 @@ func (c *Conn) readLoop() {
 	closedBarrier := make(chan struct{})
 	close(closedBarrier)
 	var lastBarrier <-chan struct{} = closedBarrier
+	var sequence uint64
 
 	for {
 		frame, err := readFrame(reader, c.maxFrameBytes)
@@ -82,9 +86,14 @@ func (c *Conn) readLoop() {
 			continue
 		}
 
+		if sequence == ^uint64(0) {
+			_ = c.shutdown(errors.New("acp: inbound sequence exhausted"))
+			return
+		}
+		sequence++
 		switch msg.kind {
 		case messageResponse:
-			c.handleResponse(msg, lastBarrier)
+			c.handleResponse(msg, lastBarrier, sequence)
 		case messageNotification:
 			if msg.method == MethodCancelRequest {
 				c.handleCancelRequest(msg.params)
@@ -95,10 +104,11 @@ func (c *Conn) readLoop() {
 				return
 			}
 			item := notification{
-				method: msg.method,
-				params: msg.params,
-				done:   make(chan struct{}),
-				bytes:  len(frame),
+				sequence: sequence,
+				method:   msg.method,
+				params:   msg.params,
+				done:     make(chan struct{}),
+				bytes:    len(frame),
 			}
 			select {
 			case c.notifications <- item:
@@ -127,7 +137,7 @@ func (c *Conn) notificationLoop() {
 		func() {
 			defer close(item.done)
 			defer c.releaseBufferedBytes(item.bytes)
-			scope := &notificationCallScope{conn: c}
+			scope := &notificationCallScope{conn: c, sequence: item.sequence}
 			scope.active.Store(true)
 			defer scope.active.Store(false)
 			defer func() {
@@ -210,7 +220,7 @@ func (c *Conn) handleRequest(msg message, payloadBytes int) bool {
 	return true
 }
 
-func (c *Conn) handleResponse(msg message, barrier <-chan struct{}) {
+func (c *Conn) handleResponse(msg message, barrier <-chan struct{}, sequence uint64) {
 	key, _ := idKey(msg.id)
 	c.mu.Lock()
 	responses := c.pending[key]
@@ -220,7 +230,7 @@ func (c *Conn) handleResponse(msg message, barrier <-chan struct{}) {
 		c.logger.Debug("ignored response for unknown request")
 		return
 	}
-	responses <- response{result: msg.result, err: msg.err, barrier: barrier}
+	responses <- response{result: msg.result, err: msg.err, barrier: barrier, sequence: sequence}
 }
 
 func (c *Conn) handleCancelRequest(params json.RawMessage) {

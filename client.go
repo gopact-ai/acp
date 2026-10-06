@@ -147,9 +147,21 @@ func (a *AgentCaller) NewSession(ctx context.Context, req *NewSessionRequest) (*
 	return call[NewSessionResponse](ctx, a.conn, MethodSessionNew, req)
 }
 
+// NewSessionWithReceipt creates a session and returns the matched response's
+// connection-local inbound sequence, with NewSession's typed validation.
+func (a *AgentCaller) NewSessionWithReceipt(ctx context.Context, req *NewSessionRequest) (*NewSessionResponse, ResponseReceipt, error) {
+	return callWithReceipt[NewSessionResponse](ctx, a.conn, MethodSessionNew, req)
+}
+
 // LoadSession loads a session.
 func (a *AgentCaller) LoadSession(ctx context.Context, req *LoadSessionRequest) (*LoadSessionResponse, error) {
 	return call[LoadSessionResponse](ctx, a.conn, MethodSessionLoad, req)
+}
+
+// LoadSessionWithReceipt loads a session and returns the matched response's
+// connection-local inbound sequence, with LoadSession's typed validation.
+func (a *AgentCaller) LoadSessionWithReceipt(ctx context.Context, req *LoadSessionRequest) (*LoadSessionResponse, ResponseReceipt, error) {
+	return callWithReceipt[LoadSessionResponse](ctx, a.conn, MethodSessionLoad, req)
 }
 
 // SetSessionMode changes the active session mode.
@@ -157,9 +169,22 @@ func (a *AgentCaller) SetSessionMode(ctx context.Context, req *SetSessionModeReq
 	return call[SetSessionModeResponse](ctx, a.conn, MethodSessionSetMode, req)
 }
 
+// SetSessionModeWithReceipt changes the active session mode and returns the matched response's
+// connection-local inbound sequence, with SetSessionMode's typed validation.
+func (a *AgentCaller) SetSessionModeWithReceipt(ctx context.Context, req *SetSessionModeRequest) (*SetSessionModeResponse, ResponseReceipt, error) {
+	return callWithReceipt[SetSessionModeResponse](ctx, a.conn, MethodSessionSetMode, req)
+}
+
 // SetSessionConfigOption changes a session configuration value.
 func (a *AgentCaller) SetSessionConfigOption(ctx context.Context, req *SetSessionConfigOptionRequest) (*SetSessionConfigOptionResponse, error) {
 	return call[SetSessionConfigOptionResponse](ctx, a.conn, MethodSessionSetConfigOption, req)
+}
+
+// SetSessionConfigOptionWithReceipt changes a session configuration value and
+// returns its matched response's inbound sequence. It performs the same typed
+// validation as SetSessionConfigOption and does not confirm the requested value.
+func (a *AgentCaller) SetSessionConfigOptionWithReceipt(ctx context.Context, req *SetSessionConfigOptionRequest) (*SetSessionConfigOptionResponse, ResponseReceipt, error) {
+	return callWithReceipt[SetSessionConfigOptionResponse](ctx, a.conn, MethodSessionSetConfigOption, req)
 }
 
 // Prompt starts a prompt turn.
@@ -185,6 +210,12 @@ func (a *AgentCaller) DeleteSession(ctx context.Context, req *DeleteSessionReque
 // ResumeSession resumes an existing session.
 func (a *AgentCaller) ResumeSession(ctx context.Context, req *ResumeSessionRequest) (*ResumeSessionResponse, error) {
 	return call[ResumeSessionResponse](ctx, a.conn, MethodSessionResume, req)
+}
+
+// ResumeSessionWithReceipt resumes an existing session and returns the matched response's
+// connection-local inbound sequence, with ResumeSession's typed validation.
+func (a *AgentCaller) ResumeSessionWithReceipt(ctx context.Context, req *ResumeSessionRequest) (*ResumeSessionResponse, ResponseReceipt, error) {
+	return callWithReceipt[ResumeSessionResponse](ctx, a.conn, MethodSessionResume, req)
 }
 
 // CloseSession closes an active session.

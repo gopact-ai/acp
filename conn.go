@@ -233,26 +233,34 @@ func (c *Conn) Close() error {
 // Call sends a request and decodes its result. Cancelling ctx makes a
 // best-effort $/cancel_request notification to the peer.
 func (c *Conn) Call(ctx context.Context, method string, params, result any) error {
+	_, err := c.CallWithReceipt(ctx, method, params, result)
+	return err
+}
+
+// CallWithReceipt is Call with the matched response's inbound sequence.
+// Cancellation, notification barriers and result decoding retain Call semantics.
+// A nonzero receipt only identifies a matched frame; an error or undecoded
+// result can still accompany it. A later notification may run before return.
+func (c *Conn) CallWithReceipt(ctx context.Context, method string, params, result any) (ResponseReceipt, error) {
 	if ctx == nil {
-		return errors.New("acp: context is nil")
+		return ResponseReceipt{}, errors.New("acp: context is nil")
 	}
 	if method == "" {
-		return errors.New("acp: method is empty")
+		return ResponseReceipt{}, errors.New("acp: method is empty")
 	}
-
 	idNumber := c.nextID.Add(1)
 	paramsJSON, err := marshalParams(params)
 	if err != nil {
-		return fmt.Errorf("acp: marshal params: %w", err)
+		return ResponseReceipt{}, fmt.Errorf("acp: marshal params: %w", err)
 	}
 	return c.callWithID(ctx, idNumber, method, paramsJSON, result)
 }
 
-func (c *Conn) callMarshaled(ctx context.Context, method string, params json.RawMessage, result any) error {
+func (c *Conn) callMarshaledWithReceipt(ctx context.Context, method string, params json.RawMessage, result any) (ResponseReceipt, error) {
 	return c.callWithID(ctx, c.nextID.Add(1), method, params, result)
 }
 
-func (c *Conn) callWithID(ctx context.Context, idNumber uint64, method string, params json.RawMessage, result any) error {
+func (c *Conn) callWithID(ctx context.Context, idNumber uint64, method string, params json.RawMessage, result any) (ResponseReceipt, error) {
 	id := rawID(idNumber)
 	key := "n:" + strconv.FormatUint(idNumber, 10)
 	responses, ok := responseChannelPool.Get().(chan response)
@@ -265,7 +273,7 @@ func (c *Conn) callWithID(ctx context.Context, idNumber uint64, method string, p
 
 	if err := c.write(ctx, requestEnvelope{JSONRPC: "2.0", ID: id, Method: method, Params: params}); err != nil {
 		c.removePending(key)
-		return err
+		return ResponseReceipt{}, err
 	}
 
 	var resp response
@@ -280,18 +288,19 @@ func (c *Conn) callWithID(ctx context.Context, idNumber uint64, method string, p
 			default:
 				c.removePending(key)
 				c.tryCancel(id)
-				return context.Cause(ctx)
+				return ResponseReceipt{}, context.Cause(ctx)
 			}
 		case <-c.ctx.Done():
 			select {
 			case resp = <-responses:
 			default:
 				c.removePending(key)
-				return context.Cause(c.ctx)
+				return ResponseReceipt{}, context.Cause(c.ctx)
 			}
 		}
 	}
 
+	receipt := ResponseReceipt{Sequence: resp.sequence}
 	responseChannelPool.Put(responses)
 	scope, _ := ctx.Value(notificationContextKey{}).(*notificationCallScope)
 	isReentrantNotificationCall := scope != nil && scope.conn == c && scope.active.Load()
@@ -305,27 +314,27 @@ func (c *Conn) callWithID(ctx context.Context, idNumber uint64, method string, p
 				select {
 				case <-resp.barrier:
 				default:
-					return context.Cause(ctx)
+					return receipt, context.Cause(ctx)
 				}
 			case <-c.ctx.Done():
 				select {
 				case <-resp.barrier:
 				default:
-					return context.Cause(c.ctx)
+					return receipt, context.Cause(c.ctx)
 				}
 			}
 		}
 	}
 	if resp.err != nil {
-		return resp.err
+		return receipt, resp.err
 	}
 	if result == nil {
-		return nil
+		return receipt, nil
 	}
 	if err := json.Unmarshal(resp.result, result); err != nil {
-		return fmt.Errorf("acp: decode result: %w", err)
+		return receipt, fmt.Errorf("acp: decode result: %w", err)
 	}
-	return nil
+	return receipt, nil
 }
 
 // Notify sends a notification.
