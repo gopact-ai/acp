@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -26,7 +27,7 @@ func awaitReceipt[T any](t *testing.T, ch <-chan T) T {
 
 func TestReceiptSequenceTracksActualInboundOrder(t *testing.T) {
 	for _, responseFirst := range []bool{false, true} {
-		t.Run(fmt.Sprint(responseFirst), func(t *testing.T) {
+		t.Run(strconv.FormatBool(responseFirst), func(t *testing.T) {
 			input, writer := io.Pipe()
 			requests, output := io.Pipe()
 			sequence := make(chan uint64, 1)
@@ -44,16 +45,16 @@ func TestReceiptSequenceTracksActualInboundOrder(t *testing.T) {
 			t.Cleanup(func() { _ = conn.Close(); _ = writer.Close(); _ = requests.Close(); _ = output.Close() })
 			peer := make(chan error, 1)
 			go func() {
-				frame, err := bufio.NewReader(requests).ReadBytes('\n')
-				if err != nil {
-					peer <- err
+				frame, readErr := bufio.NewReader(requests).ReadBytes('\n')
+				if readErr != nil {
+					peer <- readErr
 					return
 				}
 				var envelope struct {
 					ID json.RawMessage `json:"id"`
 				}
-				if err := json.Unmarshal(frame, &envelope); err != nil {
-					peer <- err
+				if decodeErr := json.Unmarshal(frame, &envelope); decodeErr != nil {
+					peer <- decodeErr
 					return
 				}
 				response := fmt.Sprintf("{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"ok\":true}}\n", envelope.ID)
@@ -62,8 +63,8 @@ func TestReceiptSequenceTracksActualInboundOrder(t *testing.T) {
 				if responseFirst {
 					frames = response + notification
 				}
-				_, err = io.WriteString(writer, frames)
-				peer <- err
+				_, writeErr := io.WriteString(writer, frames)
+				peer <- writeErr
 			}()
 			var result struct {
 				OK bool `json:"ok"`
@@ -136,8 +137,8 @@ func TestReceiptNotificationReentrantCallKeepsWireOrdering(t *testing.T) {
 	var server, client *Conn
 	var err error
 	server, err = New(a, a, func(ctx context.Context, _ string, _ json.RawMessage) (any, error) {
-		if err := server.Notify(ctx, "test/followup", nil); err != nil {
-			return nil, err
+		if notifyErr := server.Notify(ctx, "test/followup", nil); notifyErr != nil {
+			return nil, notifyErr
 		}
 		return map[string]bool{"ok": true}, nil
 	})
@@ -155,12 +156,12 @@ func TestReceiptNotificationReentrantCallKeepsWireOrdering(t *testing.T) {
 			followup <- seq
 			return nil, nil
 		}
-		receipt, err := client.CallWithReceipt(ctx, "test/nested", nil, nil)
-		if err == nil && receipt.Sequence <= seq {
-			err = errors.New("nested response lacks later ingress receipt")
+		receipt, callErr := client.CallWithReceipt(ctx, "test/nested", nil, nil)
+		if callErr == nil && receipt.Sequence <= seq {
+			callErr = errors.New("nested response lacks later ingress receipt")
 		}
-		completed <- err
-		return nil, err
+		completed <- callErr
+		return nil, callErr
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -179,7 +180,7 @@ func TestReceiptNotificationReentrantCallKeepsWireOrdering(t *testing.T) {
 
 func TestReceiptSurvivesMatchedPeerErrorAndResultDecodeError(t *testing.T) {
 	for _, peerError := range []bool{false, true} {
-		t.Run(fmt.Sprint(peerError), func(t *testing.T) {
+		t.Run(strconv.FormatBool(peerError), func(t *testing.T) {
 			a, b := net.Pipe()
 			server, err := New(a, a, func(context.Context, string, json.RawMessage) (any, error) {
 				if peerError {
@@ -233,20 +234,20 @@ func TestReceiptPriorNotificationBarrierCancellationRetainsMatchedFrame(t *testi
 	})
 	written := make(chan error, 1)
 	go func() {
-		frame, err := bufio.NewReader(requests).ReadBytes('\n')
-		if err != nil {
-			written <- err
+		frame, readErr := bufio.NewReader(requests).ReadBytes('\n')
+		if readErr != nil {
+			written <- readErr
 			return
 		}
 		var env struct {
 			ID json.RawMessage `json:"id"`
 		}
-		if err := json.Unmarshal(frame, &env); err != nil {
-			written <- err
+		if decodeErr := json.Unmarshal(frame, &env); decodeErr != nil {
+			written <- decodeErr
 			return
 		}
-		_, err = fmt.Fprintf(writer, "{\"jsonrpc\":\"2.0\",\"method\":\"test/barrier\"}\n{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n", env.ID)
-		written <- err
+		_, writeErr := fmt.Fprintf(writer, "{\"jsonrpc\":\"2.0\",\"method\":\"test/barrier\"}\n{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n", env.ID)
+		written <- writeErr
 	}()
 	ctx, cancel := context.WithCancelCause(t.Context())
 	defer cancel(nil)
@@ -299,9 +300,9 @@ func TestReceiptTypedConfigOptionRetainsOriginalValidation(t *testing.T) {
 			t.Cleanup(func() { _ = conn.Close(); _ = writer.Close(); _ = requests.Close(); _ = output.Close() })
 			peer := make(chan error, 1)
 			go func() {
-				frame, err := bufio.NewReader(requests).ReadBytes('\n')
-				if err != nil {
-					peer <- err
+				frame, readErr := bufio.NewReader(requests).ReadBytes('\n')
+				if readErr != nil {
+					peer <- readErr
 					return
 				}
 				var env struct {
@@ -309,21 +310,21 @@ func TestReceiptTypedConfigOptionRetainsOriginalValidation(t *testing.T) {
 					Method string          `json:"method"`
 					Params json.RawMessage `json:"params"`
 				}
-				if err := json.Unmarshal(frame, &env); err != nil {
-					peer <- err
+				if decodeErr := json.Unmarshal(frame, &env); decodeErr != nil {
+					peer <- decodeErr
 					return
 				}
 				var req SetSessionConfigOptionRequest
-				if err := json.Unmarshal(env.Params, &req); err != nil {
-					peer <- err
+				if decodeErr := json.Unmarshal(env.Params, &req); decodeErr != nil {
+					peer <- decodeErr
 					return
 				}
 				if env.Method != MethodSessionSetConfigOption || req.Value != false {
 					peer <- fmt.Errorf("typed wire changed: %s", frame)
 					return
 				}
-				_, err = fmt.Fprintf(writer, "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n", env.ID, result)
-				peer <- err
+				_, writeErr := fmt.Fprintf(writer, "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n", env.ID, result)
+				peer <- writeErr
 			}()
 			req := BooleanSetSessionConfigOptionRequest("session", "toggle", false)
 			resp, receipt, err := caller.SetSessionConfigOptionWithReceipt(t.Context(), &req)
@@ -411,25 +412,25 @@ func TestReceiptSessionMethodsRetainTypedWireContracts(t *testing.T) {
 			t.Cleanup(func() { _ = conn.Close(); _ = writer.Close(); _ = requests.Close(); _ = output.Close() })
 			peer := make(chan error, 1)
 			go func() {
-				frame, err := bufio.NewReader(requests).ReadBytes('\n')
-				if err != nil {
-					peer <- err
+				frame, readErr := bufio.NewReader(requests).ReadBytes('\n')
+				if readErr != nil {
+					peer <- readErr
 					return
 				}
 				var env struct {
 					ID     json.RawMessage `json:"id"`
 					Method string          `json:"method"`
 				}
-				if err := json.Unmarshal(frame, &env); err != nil {
-					peer <- err
+				if decodeErr := json.Unmarshal(frame, &env); decodeErr != nil {
+					peer <- decodeErr
 					return
 				}
 				if env.Method != tc.method {
 					peer <- fmt.Errorf("got method=%s want=%s", env.Method, tc.method)
 					return
 				}
-				_, err = fmt.Fprintf(writer, "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n", env.ID, tc.result)
-				peer <- err
+				_, writeErr := fmt.Fprintf(writer, "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":%s}\n", env.ID, tc.result)
+				peer <- writeErr
 			}()
 			receipt, err := tc.invoke(t.Context(), caller)
 			if e := awaitReceipt(t, peer); e != nil {

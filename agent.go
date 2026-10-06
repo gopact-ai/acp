@@ -207,11 +207,11 @@ func callWithReceipt[T any](ctx context.Context, conn *Conn, method string, para
 	if err != nil {
 		return nil, ResponseReceipt{}, fmt.Errorf("acp: marshal %s params: %w", method, err)
 	}
-	if err := validateRequestFields(paramsJSON, method); err != nil {
-		return nil, ResponseReceipt{}, fmt.Errorf("acp: invalid %s params: %w", method, err)
+	if validationErr := validateRequestFields(paramsJSON, method); validationErr != nil {
+		return nil, ResponseReceipt{}, fmt.Errorf("acp: invalid %s params: %w", method, validationErr)
 	}
-	if err := validateTypedJSON(paramsJSON, params); err != nil {
-		return nil, ResponseReceipt{}, fmt.Errorf("acp: invalid %s params: %w", method, err)
+	if validationErr := validateTypedJSON(paramsJSON, params); validationErr != nil {
+		return nil, ResponseReceipt{}, fmt.Errorf("acp: invalid %s params: %w", method, validationErr)
 	}
 	var raw json.RawMessage
 	receipt, err := conn.callMarshaledWithReceipt(ctx, method, paramsJSON, &raw)

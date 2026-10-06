@@ -256,11 +256,6 @@ func (c *Conn) CallWithReceipt(ctx context.Context, method string, params, resul
 	return c.callWithID(ctx, idNumber, method, paramsJSON, result)
 }
 
-func (c *Conn) callMarshaled(ctx context.Context, method string, params json.RawMessage, result any) error {
-	_, err := c.callMarshaledWithReceipt(ctx, method, params, result)
-	return err
-}
-
 func (c *Conn) callMarshaledWithReceipt(ctx context.Context, method string, params json.RawMessage, result any) (ResponseReceipt, error) {
 	return c.callWithID(ctx, c.nextID.Add(1), method, params, result)
 }
