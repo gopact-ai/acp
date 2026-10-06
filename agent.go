@@ -195,35 +195,41 @@ func (c *ClientCaller) CompleteElicitation(ctx context.Context, notification *Co
 }
 
 func call[T any](ctx context.Context, conn *Conn, method string, params any) (*T, error) {
+	result, _, err := callWithReceipt[T](ctx, conn, method, params)
+	return result, err
+}
+
+func callWithReceipt[T any](ctx context.Context, conn *Conn, method string, params any) (*T, ResponseReceipt, error) {
 	if ctx == nil {
-		return nil, errors.New("acp: context is nil")
+		return nil, ResponseReceipt{}, errors.New("acp: context is nil")
 	}
 	paramsJSON, err := json.Marshal(params)
 	if err != nil {
-		return nil, fmt.Errorf("acp: marshal %s params: %w", method, err)
+		return nil, ResponseReceipt{}, fmt.Errorf("acp: marshal %s params: %w", method, err)
 	}
 	if err := validateRequestFields(paramsJSON, method); err != nil {
-		return nil, fmt.Errorf("acp: invalid %s params: %w", method, err)
+		return nil, ResponseReceipt{}, fmt.Errorf("acp: invalid %s params: %w", method, err)
 	}
 	if err := validateTypedJSON(paramsJSON, params); err != nil {
-		return nil, fmt.Errorf("acp: invalid %s params: %w", method, err)
+		return nil, ResponseReceipt{}, fmt.Errorf("acp: invalid %s params: %w", method, err)
 	}
 	var raw json.RawMessage
-	if err := conn.callMarshaled(ctx, method, paramsJSON, &raw); err != nil {
-		return nil, err
+	receipt, err := conn.callMarshaledWithReceipt(ctx, method, paramsJSON, &raw)
+	if err != nil {
+		return nil, receipt, err
 	}
 	if err := validateResponseFields(raw, method); err != nil {
 		responseErr := fmt.Errorf("%w: %w", ErrInvalidResponse, err)
 		_ = conn.shutdown(responseErr)
-		return nil, responseErr
+		return nil, receipt, responseErr
 	}
 	var result T
 	if err := json.Unmarshal(raw, &result); err != nil {
 		responseErr := fmt.Errorf("%w: decode result: %w", ErrInvalidResponse, err)
 		_ = conn.shutdown(responseErr)
-		return nil, responseErr
+		return nil, receipt, responseErr
 	}
-	return &result, nil
+	return &result, receipt, nil
 }
 
 func notify(ctx context.Context, conn *Conn, method string, params any) error {

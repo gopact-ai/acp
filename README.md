@@ -62,6 +62,14 @@ runtime without the stable-v1 typed layer.
 - Notification handlers may call the peer synchronously when they propagate
   the handler context. Reentrant calls bypass the notification barrier to avoid
   an ordering cycle; queued notifications then continue in wire order.
+- `CallWithReceipt` and the `AgentCaller` session methods ending in
+  `WithReceipt` expose
+  a matched response's connection-local inbound sequence. Notification handlers
+  can read the same clock with `NotificationSequence(ctx)`. Compare only within
+  one connection; gaps are permitted, and zero means no response receipt. The
+  sequence is local metadata, never sent on the wire, and does not prove success
+  or execution. Consumers publishing state after a call must still reject older
+  observations: a later notification can run before the caller publishes.
 - Frames are limited to 16 MiB, retained request and notification payloads to
   64 MiB in total, and the ordered notification backlog to 1024. `Option`
   values configure these limits. Exceeding an inbound limit closes the
