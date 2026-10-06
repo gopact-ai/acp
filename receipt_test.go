@@ -212,8 +212,12 @@ func TestReceiptSurvivesMatchedPeerErrorAndResultDecodeError(t *testing.T) {
 func TestReceiptPriorNotificationBarrierCancellationRetainsMatchedFrame(t *testing.T) {
 	input, writer := io.Pipe()
 	requests, output := io.Pipe()
-	entered, release := make(chan struct{}), make(chan struct{})
-	conn, err := New(input, output, func(context.Context, string, json.RawMessage) (any, error) {
+	entered, release, fence := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	conn, err := New(input, output, func(_ context.Context, method string, _ json.RawMessage) (any, error) {
+		if method == "test/fence" {
+			close(fence)
+			return map[string]bool{"ok": true}, nil
+		}
 		close(entered)
 		<-release
 		return nil, nil
@@ -246,7 +250,11 @@ func TestReceiptPriorNotificationBarrierCancellationRetainsMatchedFrame(t *testi
 			written <- decodeErr
 			return
 		}
-		_, writeErr := fmt.Fprintf(writer, "{\"jsonrpc\":\"2.0\",\"method\":\"test/barrier\"}\n{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n", env.ID)
+		_, writeErr := fmt.Fprintf(writer, "{\"jsonrpc\":\"2.0\",\"method\":\"test/barrier\"}\n{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":\"fence\",\"method\":\"test/fence\",\"params\":{}}\n", env.ID)
+		if writeErr == nil {
+			// Drain the reverse request's response so the writer is not held.
+			_, writeErr = bufio.NewReader(requests).ReadBytes('\n')
+		}
 		written <- writeErr
 	}()
 	ctx, cancel := context.WithCancelCause(t.Context())
@@ -258,25 +266,12 @@ func TestReceiptPriorNotificationBarrierCancellationRetainsMatchedFrame(t *testi
 	done := make(chan outcome, 1)
 	go func() { r, e := conn.CallWithReceipt(ctx, "test/wait", nil, nil); done <- outcome{r, e} }()
 	awaitReceipt(t, entered)
+	// The reader dispatches this real inbound request only after completing
+	// the preceding response's channel send. No pending-map observation or
+	// fabricated receipt is used as a delivery fence.
+	awaitReceipt(t, fence)
 	if err := awaitReceipt(t, written); err != nil {
 		t.Fatal(err)
-	}
-	// io.Pipe write has reached the response frame; wait for the real pending
-	// match before canceling, without manufacturing an ingress ordinal.
-	until := time.After(time.Second)
-	for {
-		conn.mu.Lock()
-		matched := len(conn.pending) == 0
-		conn.mu.Unlock()
-		if matched {
-			break
-		}
-		select {
-		case <-until:
-			t.Fatal("response did not match")
-		default:
-			time.Sleep(time.Millisecond)
-		}
 	}
 	cause := errors.New("local barrier canceled")
 	cancel(cause)
